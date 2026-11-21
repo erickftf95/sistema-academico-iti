@@ -16,6 +16,7 @@ function Materias() {
   const [esEdicion, setEsEdicion] = useState(false);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
@@ -26,8 +27,10 @@ function Materias() {
       const data = await materiasService.listar();
       setMaterias(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError("No se pudieron cargar las materias desde el servidor.");
-      console.error(err);
+      setError(
+        err.response?.data?.message ||
+          "No se pudieron obtener las materias desde el servidor."
+      );
     } finally {
       setCargando(false);
     }
@@ -57,6 +60,11 @@ function Materias() {
     setMostrarModal(true);
   };
 
+  const cerrarModal = () => {
+    limpiarFormulario();
+    setMostrarModal(false);
+  };
+
   const prepararActualizacion = (mat) => {
     setMensaje("");
     setMateria({
@@ -65,7 +73,10 @@ function Materias() {
       descripcion: mat.descripcion || "",
       creditos: mat.creditos ?? "",
       estado: mat.estado || "Activo",
-      carrera: typeof mat.carrera === "object" ? mat.carrera?.nombre || "" : mat.carrera || "",
+      carrera:
+        typeof mat.carrera === "object"
+          ? mat.carrera?.nombre || ""
+          : mat.carrera || "",
     });
     setEsEdicion(true);
     setError("");
@@ -73,7 +84,9 @@ function Materias() {
   };
 
   const eliminarMateria = async (codigo) => {
-    if (!window.confirm("¿Está seguro de que desea eliminar esta materia?")) return;
+    if (!window.confirm("¿Está seguro de que desea eliminar esta materia?")) {
+      return;
+    }
 
     setError("");
     setMensaje("");
@@ -82,8 +95,10 @@ function Materias() {
       setMensaje("Materia eliminada exitosamente.");
       await cargarMaterias();
     } catch (err) {
-      setError(err.response?.data?.message || "No se pudo eliminar la materia.");
-      console.error(err);
+      setError(
+        err.response?.data?.message ||
+          "No se pudo eliminar la materia. Intente nuevamente."
+      );
     }
   };
 
@@ -92,36 +107,71 @@ function Materias() {
     setError("");
     setMensaje("");
 
+    const codigoLimpio = materia.codigo.trim().toUpperCase();
+    const nombreLimpio = materia.nombre.trim();
+    const descripcionLimpia = materia.descripcion.trim();
+    const carreraLimpia = materia.carrera.trim();
+    const creditosNum = Number(materia.creditos);
+
+    if (!codigoLimpio) {
+      setError("El código de la materia es obligatorio.");
+      return;
+    }
+
+    if (!nombreLimpio) {
+      setError("El nombre de la materia es obligatorio.");
+      return;
+    }
+
+    if (!descripcionLimpia) {
+      setError("La descripción de la materia es obligatoria.");
+      return;
+    }
+
+    if (!carreraLimpia) {
+      setError("La carrera es obligatoria.");
+      return;
+    }
+
     if (
-      !materia.codigo.trim() ||
-      !materia.nombre.trim() ||
-      !materia.descripcion.trim() ||
-      !materia.carrera.trim() ||
-      !materia.creditos
+      materia.creditos === "" ||
+      !Number.isInteger(creditosNum) ||
+      creditosNum <= 0
     ) {
-      setError("Por favor, complete todos los campos obligatorios.");
+      setError("Los créditos deben ser números enteros mayores que cero.");
       return;
     }
 
-    if (Number(materia.creditos) <= 0) {
-      setError("El número de créditos debe ser mayor que cero.");
+    if (!["Activo", "Inactivo"].includes(materia.estado)) {
+      setError("El estado debe ser Activo o Inactivo.");
       return;
     }
 
+    setGuardando(true);
     try {
+      const payload = {
+        codigo: codigoLimpio,
+        nombre: nombreLimpio,
+        descripcion: descripcionLimpia,
+        creditos: creditosNum,
+        estado: materia.estado,
+        carrera: carreraLimpia,
+      };
+
       if (esEdicion) {
-        await materiasService.actualizar(materia.codigo, materia);
+        await materiasService.actualizar(codigoLimpio, payload);
         setMensaje("Materia actualizada exitosamente.");
       } else {
         const codigoRepetido = materias.some(
-          (mat) => mat.codigo.toUpperCase() === materia.codigo.trim().toUpperCase()
+          (mat) => (mat.codigo || "").trim().toUpperCase() === codigoLimpio
         );
         if (codigoRepetido) {
-          setError("El código de la materia ya está registrado.");
+          setError("El código de la materia ya se encuentra registrado.");
+          setGuardando(false);
           return;
         }
 
-        await materiasService.crear(materia);
+        await materiasService.crear(payload);
         setMensaje("Materia registrada exitosamente.");
       }
 
@@ -129,8 +179,12 @@ function Materias() {
       limpiarFormulario();
       await cargarMaterias();
     } catch (err) {
-      setError(err.response?.data?.message || "Ocurrió un error al guardar la materia.");
-      console.error(err);
+      setError(
+        err.response?.data?.message ||
+          "Ocurrió un error al comunicarse con el servidor."
+      );
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -142,113 +196,140 @@ function Materias() {
             <i className="bi bi-book me-2"></i>
             Materias
           </h3>
-          <p className="text-muted mb-0">Administración y registro de asignaturas</p>
+          <p className="text-muted mb-0">
+            Administración y registro de asignaturas
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={abrirModalNuevo}>
-          <i className="bi bi-journal-plus me-2"></i>
-          Nueva Materia
-        </button>
+        {!(mostrarModal && esEdicion) && (
+          <button className="btn btn-primary" onClick={abrirModalNuevo}>
+            <i className="bi bi-journal-plus me-2"></i>
+            Nueva Materia
+          </button>
+        )}
       </div>
 
       {mensaje && (
-        <div className="alert alert-success alert-dismissible fade show" role="alert">
+        <div
+          className="alert alert-success alert-dismissible fade show"
+          role="alert"
+        >
           <i className="bi bi-check-circle-fill me-2"></i>
           {mensaje}
           <button
             type="button"
             className="btn-close"
             onClick={() => setMensaje("")}
-            aria-label="Close"
+            aria-label="Cerrar"
           ></button>
         </div>
       )}
 
-      {/* TABLA DE MATERIAS */}
-      <div className="card border-0 shadow-sm">
-        <div className="card-header bg-white py-3">
-          <h5 className="mb-0">
-            <i className="bi bi-list-ul me-2"></i>
-            Materias registradas
-          </h5>
+      {!mostrarModal && error && (
+        <div
+          className="alert alert-danger alert-dismissible fade show"
+          role="alert"
+        >
+          <i className="bi bi-exclamation-triangle-fill me-2"></i>
+          {error}
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => setError("")}
+            aria-label="Cerrar"
+          ></button>
         </div>
+      )}
 
-        <div className="card-body">
-          <div className="table-responsive">
-            <table className="table table-striped table-hover align-middle">
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Nombre</th>
-                  <th>Descripción</th>
-                  <th>Créditos</th>
-                  <th>Estado</th>
-                  <th>Carrera</th>
-                  <th className="text-center">Acciones</th>
-                </tr>
-              </thead>
+      {/* TABLA DE MATERIAS: se oculta al seleccionar Editar */}
+      {!(mostrarModal && esEdicion) && (
+        <div className="card border-0 shadow-sm">
+          <div className="card-header bg-white py-3">
+            <h5 className="mb-0">
+              <i className="bi bi-list-ul me-2"></i>
+              Materias registradas
+            </h5>
+          </div>
 
-              <tbody>
-                {cargando ? (
+          <div className="card-body">
+            <div className="table-responsive">
+              <table className="table table-striped table-hover align-middle">
+                <thead>
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
-                      Cargando materias...
-                    </td>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Créditos</th>
+                    <th>Estado</th>
+                    <th>Carrera</th>
+                    <th className="text-center">Acciones</th>
                   </tr>
-                ) : materias.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
-                      No hay materias registradas.
-                    </td>
-                  </tr>
-                ) : (
-                  materias.map((mat) => (
-                    <tr key={mat.codigo}>
-                      <td>{mat.codigo}</td>
-                      <td>{mat.nombre}</td>
-                      <td>{mat.descripcion}</td>
-                      <td>{mat.creditos}</td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            mat.estado === "Activo" ? "bg-success" : "bg-secondary"
-                          }`}
-                        >
-                          {mat.estado}
-                        </span>
-                      </td>
-                      <td>
-                        {typeof mat.carrera === "object"
-                          ? mat.carrera?.nombre || "-"
-                          : mat.carrera || "-"}
-                      </td>
-                      <td className="text-center">
-                        <div className="d-flex justify-content-center gap-2">
-                          <button
-                            className="btn btn-sm btn-outline-warning"
-                            onClick={() => prepararActualizacion(mat)}
-                            title="Actualizar"
-                          >
-                            <i className="bi bi-pencil-square"></i>
-                          </button>
-                          <button
-                            className="btn btn-sm btn-outline-danger"
-                            onClick={() => eliminarMateria(mat.codigo)}
-                            title="Eliminar"
-                          >
-                            <i className="bi bi-trash"></i>
-                          </button>
-                        </div>
+                </thead>
+
+                <tbody>
+                  {cargando ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-4 text-muted">
+                        Cargando materias...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : materias.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-4 text-muted">
+                        No hay materias registradas.
+                      </td>
+                    </tr>
+                  ) : (
+                    materias.map((mat) => (
+                      <tr key={mat.codigo}>
+                        <td>{mat.codigo}</td>
+                        <td>{mat.nombre}</td>
+                        <td>{mat.descripcion}</td>
+                        <td>{mat.creditos}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              mat.estado === "Activo"
+                                ? "bg-success"
+                                : "bg-secondary"
+                            }`}
+                          >
+                            {mat.estado}
+                          </span>
+                        </td>
+                        <td>
+                          {typeof mat.carrera === "object"
+                            ? mat.carrera?.nombre || "-"
+                            : mat.carrera || "-"}
+                        </td>
+                        <td className="text-center">
+                          <div className="d-flex justify-content-center gap-2">
+                            <button
+                              className="btn btn-sm btn-outline-warning"
+                              onClick={() => prepararActualizacion(mat)}
+                              title="Editar"
+                            >
+                              <i className="bi bi-pencil-square"></i>
+                            </button>
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => eliminarMateria(mat.codigo)}
+                              title="Eliminar"
+                            >
+                              <i className="bi bi-trash"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* VENTANA MODAL / POP-UP PARA REGISTRAR / ACTUALIZAR */}
+      {/* VENTANA POP-UP / MODAL PARA REGISTRAR Y EDITAR */}
       {mostrarModal && (
         <div
           className="modal show d-block"
@@ -257,19 +338,25 @@ function Materias() {
         >
           <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content border-0 shadow">
-              <div className="modal-header bg-primary text-white">
+              <div
+                className={`modal-header ${
+                  esEdicion ? "bg-warning text-dark" : "bg-primary text-white"
+                }`}
+              >
                 <h5 className="modal-title">
                   <i
                     className={`bi ${
                       esEdicion ? "bi-pencil-square" : "bi-journal-plus"
                     } me-2`}
                   ></i>
-                  {esEdicion ? "Actualizar Materia" : "Registro de nueva materia"}
+                  {esEdicion ? "Editar Materia" : "Registro de nueva materia"}
                 </h5>
                 <button
                   type="button"
-                  className="btn-close btn-close-white"
-                  onClick={() => setMostrarModal(false)}
+                  className={`btn-close ${esEdicion ? "" : "btn-close-white"}`}
+                  onClick={cerrarModal}
+                  disabled={guardando}
+                  aria-label="Cerrar"
                 ></button>
               </div>
 
@@ -281,15 +368,15 @@ function Materias() {
                   </div>
                 )}
 
-                <form onSubmit={guardarMateria}>
+                <form onSubmit={guardarMateria} noValidate>
                   <div className="row">
                     <div className="col-md-6 mb-3">
-                      <label className="form-label">Código alfanumérico</label>
+                      <label className="form-label">Código</label>
                       <input
                         type="text"
                         name="codigo"
                         className="form-control"
-                        placeholder="Ej. MAT-001"
+                        placeholder="Ej. MAT006"
                         value={materia.codigo}
                         onChange={manejarCambio}
                         disabled={esEdicion}
@@ -303,7 +390,7 @@ function Materias() {
                         type="text"
                         name="nombre"
                         className="form-control"
-                        placeholder="Nombre de la materia"
+                        placeholder="Ej. Arquitectura de Software"
                         value={materia.nombre}
                         onChange={manejarCambio}
                         required
@@ -324,12 +411,13 @@ function Materias() {
                     </div>
 
                     <div className="col-md-4 mb-3">
-                      <label className="form-label">Número de créditos</label>
+                      <label className="form-label">Créditos</label>
                       <input
                         type="number"
                         name="creditos"
                         className="form-control"
                         min="1"
+                        step="1"
                         placeholder="Ej. 4"
                         value={materia.creditos}
                         onChange={manejarCambio}
@@ -368,13 +456,22 @@ function Materias() {
                     <button
                       type="button"
                       className="btn btn-outline-secondary"
-                      onClick={() => setMostrarModal(false)}
+                      onClick={cerrarModal}
+                      disabled={guardando}
                     >
                       Cancelar
                     </button>
-                    <button type="submit" className="btn btn-primary">
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={guardando}
+                    >
                       <i className="bi bi-floppy me-2"></i>
-                      {esEdicion ? "Guardar cambios" : "Guardar materia"}
+                      {guardando
+                        ? "Guardando..."
+                        : esEdicion
+                        ? "Guardar"
+                        : "Guardar materia"}
                     </button>
                   </div>
                 </form>
