@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { materiasService } from "../services/materiasService";
 
 const materiaInicial = {
   codigo: "",
@@ -6,6 +7,7 @@ const materiaInicial = {
   descripcion: "",
   creditos: "",
   estado: "Activo",
+  carrera: "",
 };
 
 function Materias() {
@@ -13,54 +15,88 @@ function Materias() {
   const [materia, setMateria] = useState(materiaInicial);
   const [esEdicion, setEsEdicion] = useState(false);
   const [mostrarModal, setMostrarModal] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
   const [mensaje, setMensaje] = useState("");
   const [error, setError] = useState("");
 
+  const cargarMaterias = async () => {
+    setCargando(true);
+    try {
+      const data = await materiasService.listar();
+      setMaterias(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError("No se pudieron cargar las materias desde el servidor.");
+      console.error(err);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarMaterias();
+  }, []);
+
   const manejarCambio = (e) => {
     const { name, value } = e.target;
-    setMateria({
-      ...materia,
+    setMateria((prev) => ({
+      ...prev,
       [name]: value,
-    });
+    }));
   };
 
   const limpiarFormulario = () => {
     setMateria(materiaInicial);
     setEsEdicion(false);
     setError("");
-    setMensaje("");
   };
 
   const abrirModalNuevo = () => {
+    setMensaje("");
     limpiarFormulario();
     setMostrarModal(true);
   };
 
   const prepararActualizacion = (mat) => {
-    setMateria(mat);
+    setMensaje("");
+    setMateria({
+      codigo: mat.codigo || "",
+      nombre: mat.nombre || "",
+      descripcion: mat.descripcion || "",
+      creditos: mat.creditos ?? "",
+      estado: mat.estado || "Activo",
+      carrera: typeof mat.carrera === "object" ? mat.carrera?.nombre || "" : mat.carrera || "",
+    });
     setEsEdicion(true);
     setError("");
-    setMensaje("");
     setMostrarModal(true);
   };
 
-  const eliminarMateria = (codigo) => {
-    if (window.confirm("¿Está seguro de que desea eliminar esta materia?")) {
-      setMaterias(materias.filter((mat) => mat.codigo !== codigo));
+  const eliminarMateria = async (codigo) => {
+    if (!window.confirm("¿Está seguro de que desea eliminar esta materia?")) return;
+
+    setError("");
+    setMensaje("");
+    try {
+      await materiasService.eliminar(codigo);
       setMensaje("Materia eliminada exitosamente.");
-      setError("");
+      await cargarMaterias();
+    } catch (err) {
+      setError(err.response?.data?.message || "No se pudo eliminar la materia.");
+      console.error(err);
     }
   };
 
-  const guardarMateria = (e) => {
+  const guardarMateria = async (e) => {
     e.preventDefault();
     setError("");
+    setMensaje("");
 
     if (
       !materia.codigo.trim() ||
       !materia.nombre.trim() ||
       !materia.descripcion.trim() ||
+      !materia.carrera.trim() ||
       !materia.creditos
     ) {
       setError("Por favor, complete todos los campos obligatorios.");
@@ -72,25 +108,30 @@ function Materias() {
       return;
     }
 
-    if (esEdicion) {
-      setMaterias(
-        materias.map((mat) => (mat.codigo === materia.codigo ? materia : mat))
-      );
-      setMensaje("Materia actualizada exitosamente.");
-    } else {
-      const codigoRepetido = materias.some((mat) => mat.codigo === materia.codigo);
-      if (codigoRepetido) {
-        setError("El código de la materia ya está registrado.");
-        return;
+    try {
+      if (esEdicion) {
+        await materiasService.actualizar(materia.codigo, materia);
+        setMensaje("Materia actualizada exitosamente.");
+      } else {
+        const codigoRepetido = materias.some(
+          (mat) => mat.codigo.toUpperCase() === materia.codigo.trim().toUpperCase()
+        );
+        if (codigoRepetido) {
+          setError("El código de la materia ya está registrado.");
+          return;
+        }
+
+        await materiasService.crear(materia);
+        setMensaje("Materia registrada exitosamente.");
       }
 
-      setMaterias([...materias, materia]);
-      setMensaje("Materia registrada exitosamente.");
+      setMostrarModal(false);
+      limpiarFormulario();
+      await cargarMaterias();
+    } catch (err) {
+      setError(err.response?.data?.message || "Ocurrió un error al guardar la materia.");
+      console.error(err);
     }
-
-    setError("");
-    setMostrarModal(false);
-    limpiarFormulario();
   };
 
   return (
@@ -113,6 +154,12 @@ function Materias() {
         <div className="alert alert-success alert-dismissible fade show" role="alert">
           <i className="bi bi-check-circle-fill me-2"></i>
           {mensaje}
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => setMensaje("")}
+            aria-label="Close"
+          ></button>
         </div>
       )}
 
@@ -135,14 +182,21 @@ function Materias() {
                   <th>Descripción</th>
                   <th>Créditos</th>
                   <th>Estado</th>
+                  <th>Carrera</th>
                   <th className="text-center">Acciones</th>
                 </tr>
               </thead>
 
               <tbody>
-                {materias.length === 0 ? (
+                {cargando ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-4 text-muted">
+                    <td colSpan="7" className="text-center py-4 text-muted">
+                      Cargando materias...
+                    </td>
+                  </tr>
+                ) : materias.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-4 text-muted">
                       No hay materias registradas.
                     </td>
                   </tr>
@@ -154,9 +208,18 @@ function Materias() {
                       <td>{mat.descripcion}</td>
                       <td>{mat.creditos}</td>
                       <td>
-                        <span className={`badge ${mat.estado === "Activo" ? "bg-success" : "bg-secondary"}`}>
+                        <span
+                          className={`badge ${
+                            mat.estado === "Activo" ? "bg-success" : "bg-secondary"
+                          }`}
+                        >
                           {mat.estado}
                         </span>
+                      </td>
+                      <td>
+                        {typeof mat.carrera === "object"
+                          ? mat.carrera?.nombre || "-"
+                          : mat.carrera || "-"}
                       </td>
                       <td className="text-center">
                         <div className="d-flex justify-content-center gap-2">
@@ -187,12 +250,20 @@ function Materias() {
 
       {/* VENTANA MODAL / POP-UP PARA REGISTRAR / ACTUALIZAR */}
       {mostrarModal && (
-        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+        <div
+          className="modal show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
           <div className="modal-dialog modal-lg modal-dialog-centered">
             <div className="modal-content border-0 shadow">
               <div className="modal-header bg-primary text-white">
                 <h5 className="modal-title">
-                  <i className={`bi ${esEdicion ? "bi-pencil-square" : "bi-journal-plus"} me-2`}></i>
+                  <i
+                    className={`bi ${
+                      esEdicion ? "bi-pencil-square" : "bi-journal-plus"
+                    } me-2`}
+                  ></i>
                   {esEdicion ? "Actualizar Materia" : "Registro de nueva materia"}
                 </h5>
                 <button
@@ -252,7 +323,7 @@ function Materias() {
                       ></textarea>
                     </div>
 
-                    <div className="col-md-6 mb-3">
+                    <div className="col-md-4 mb-3">
                       <label className="form-label">Número de créditos</label>
                       <input
                         type="number"
@@ -266,7 +337,7 @@ function Materias() {
                       />
                     </div>
 
-                    <div className="col-md-6 mb-3">
+                    <div className="col-md-4 mb-3">
                       <label className="form-label">Estado</label>
                       <select
                         name="estado"
@@ -277,6 +348,19 @@ function Materias() {
                         <option value="Activo">Activo</option>
                         <option value="Inactivo">Inactivo</option>
                       </select>
+                    </div>
+
+                    <div className="col-md-4 mb-3">
+                      <label className="form-label">Carrera</label>
+                      <input
+                        type="text"
+                        name="carrera"
+                        className="form-control"
+                        placeholder="Ej. Desarrollo de Software"
+                        value={materia.carrera}
+                        onChange={manejarCambio}
+                        required
+                      />
                     </div>
                   </div>
 
