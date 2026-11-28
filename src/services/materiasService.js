@@ -1,61 +1,40 @@
 import axios from "axios";
 
-const rawBaseUrl =
+const API_URL =
   import.meta.env.VITE_API_URL || "https://backend-academico-iti.onrender.com/api";
 
-// Normaliza barras duplicadas o finales para evitar "//materias"
-const baseURL = rawBaseUrl.replace(/\/+$/, "");
-
-const api = axios.create({
-  baseURL,
-  timeout: 10000,
+const clienteApi = axios.create({
+  baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Deja únicamente los campos permitidos al crear o actualizar una materia
-const normalizarPayloadMateria = (materia) => ({
-  codigo: materia.codigo.trim().toUpperCase(),
-  nombre: materia.nombre.trim(),
-  descripcion: (materia.descripcion || "").trim(),
-  creditos: Number(materia.creditos),
-  estado: materia.estado,
-  carrera: (materia.carrera || "").trim(),
-});
+const extraerDatos = (response) => {
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.data?.data)) return response.data.data;
+  if (Array.isArray(response.data?.materias)) return response.data.materias;
+  return response.data;
+};
 
 export const materiasService = {
   listar: async () => {
-    const response = await api.get("/materias");
-    return response.data;
-  },
-
-  obtenerPorCodigo: async (codigo) => {
-    const response = await api.get(`/materias/${encodeURIComponent(codigo.trim())}`);
-    return response.data;
+    const response = await clienteApi.get("/materias");
+    return extraerDatos(response);
   },
 
   crear: async (materia) => {
-    const payload = normalizarPayloadMateria(materia);
-    const response = await api.post("/materias", payload);
+    const response = await clienteApi.post("/materias", materia);
     return response.data;
   },
 
   actualizar: async (codigo, materia) => {
-    const payload = normalizarPayloadMateria(materia);
-    const response = await api.put(
-      `/materias/${encodeURIComponent(codigo.trim())}`,
-      payload
-    );
+    const response = await clienteApi.put(`/materias/${codigo}`, materia);
     return response.data;
   },
 
   eliminar: async (codigo) => {
-    const response = await api.delete(
-      `/materias/${encodeURIComponent(codigo.trim())}`
-    );
+    const response = await clienteApi.delete(`/materias/${codigo}`);
     return response.data;
   },
 };
-
-export default materiasService;

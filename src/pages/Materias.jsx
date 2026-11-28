@@ -10,6 +10,9 @@ const materiaInicial = {
   carrera: "",
 };
 
+const obtenerClaveMateria = (mat) =>
+  String(mat?.id ?? mat?._id ?? mat?.codigo ?? "").trim();
+
 function Materias() {
   const [materias, setMaterias] = useState([]);
   const [materia, setMateria] = useState(materiaInicial);
@@ -56,17 +59,20 @@ function Materias() {
 
   const abrirModalNuevo = () => {
     setMensaje("");
+    setError("");
     limpiarFormulario();
     setMostrarModal(true);
   };
 
   const cerrarModal = () => {
+    setError("");
     limpiarFormulario();
     setMostrarModal(false);
   };
 
   const prepararActualizacion = (mat) => {
     setMensaje("");
+    setError("");
     setMateria({
       codigo: mat.codigo || "",
       nombre: mat.nombre || "",
@@ -79,7 +85,6 @@ function Materias() {
           : mat.carrera || "",
     });
     setEsEdicion(true);
-    setError("");
     setMostrarModal(true);
   };
 
@@ -201,7 +206,11 @@ function Materias() {
           </p>
         </div>
         {!(mostrarModal && esEdicion) && (
-          <button className="btn btn-primary" onClick={abrirModalNuevo}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={abrirModalNuevo}
+          >
             <i className="bi bi-journal-plus me-2"></i>
             Nueva Materia
           </button>
@@ -279,8 +288,8 @@ function Materias() {
                       </td>
                     </tr>
                   ) : (
-                    materias.map((mat) => (
-                      <tr key={mat.codigo}>
+                    materias.map((mat, index) => (
+                      <tr key={obtenerClaveMateria(mat) || index}>
                         <td>{mat.codigo}</td>
                         <td>{mat.nombre}</td>
                         <td>{mat.descripcion}</td>
@@ -304,6 +313,7 @@ function Materias() {
                         <td className="text-center">
                           <div className="d-flex justify-content-center gap-2">
                             <button
+                              type="button"
                               className="btn btn-sm btn-outline-warning"
                               onClick={() => prepararActualizacion(mat)}
                               title="Editar"
@@ -311,6 +321,7 @@ function Materias() {
                               <i className="bi bi-pencil-square"></i>
                             </button>
                             <button
+                              type="button"
                               className="btn btn-sm btn-outline-danger"
                               onClick={() => eliminarMateria(mat.codigo)}
                               title="Eliminar"

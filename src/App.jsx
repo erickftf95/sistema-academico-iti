@@ -1,16 +1,15 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Layout from "./components/Layout";
 import Estudiantes from "./pages/Estudiantes";
-import Materias from "./pages/Materias";
 import Inicio from "./pages/Inicio";
 import Login from "./pages/Login";
+import Materias from "./pages/Materias";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
-
         <Route
           path="/inicio"
           element={
@@ -19,7 +18,6 @@ function App() {
             </Layout>
           }
         />
-
         <Route
           path="/estudiantes"
           element={
@@ -28,7 +26,6 @@ function App() {
             </Layout>
           }
         />
-
         <Route
           path="/materias"
           element={
@@ -37,8 +34,6 @@ function App() {
             </Layout>
           }
         />
-
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
